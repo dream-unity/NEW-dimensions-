@@ -1,0 +1,113 @@
+name: Build New Dimensions from scratch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bootstrap-new-dimensions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out the new repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify and reconstruct the complete application
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '6e5f510a08fc11c7a65dc2571325d19ba6e79fad619cb279a9865739eee93636  .payload/site-00.b64' | sha256sum --check
+          echo 'fdb48ce4045c4ec0a7e443fb0b63c4a4fce854d7464db0e31c717829e77837fb  .payload/site-01.b64' | sha256sum --check
+          echo 'a25528794bd0b6ec8a6d0df6152c853668740bf4746472788fc3ea60d37a4d59  .payload/site-02.b64' | sha256sum --check
+          echo '4afc6b910f1d922ba60ef3c61d475fe4d60284666d8a1b03023caff420d50817  .payload/site-03.b64' | sha256sum --check
+          cat .payload/site-*.b64 > /tmp/new-dimensions.b64
+          test "$(wc -c < /tmp/new-dimensions.b64)" -eq 24524
+          echo '5d0341b5e43390d610f24e688409cd38e77c37ea2d69229673f344669843dbf0  /tmp/new-dimensions.b64' | sha256sum --check
+          base64 --decode /tmp/new-dimensions.b64 > /tmp/new-dimensions.tar.gz
+          echo '09cd6b567ad7e113d5a7aa507fb55215b5487ebe8974ba3a1f7ddf96a6858468  /tmp/new-dimensions.tar.gz' | sha256sum --check
+          tar -xzf /tmp/new-dimensions.tar.gz
+
+      - name: Verify every authored file byte-for-byte
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '4051c32dfe16d96896554d6230637f3ef981111a3eb8347a3fb47a0a86fef74c  index.html' | sha256sum --check
+          echo 'a59958d36fdc2bf1192ac55bfc825866fe822ba17ac096aab95eba4c9ec970ef  styles.css' | sha256sum --check
+          echo '9dde49d503261cb5aa32784be8ac796a68ae8d605712ceb4adc39b04fd61b639  app.js' | sha256sum --check
+          echo 'f24e97cbd836a4a23a04f0c918362b42f119334bf8545803237eeeb72bf0b206  reasoning.js' | sha256sum --check
+          echo 'ac0f1c58519bdbc064b3c47343c9e7f9ab5289fd52f1ba24da6eee52ea355c3f  tests.mjs' | sha256sum --check
+          echo '384e808e98419e672b0f2043ece1fccb0d18906e2950a74b4c67d479f3166fe8  .github/workflows/deploy-pages.yml' | sha256sum --check
+          test -f .nojekyll
+
+      - name: Test the dimensional interaction grammar
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app.js
+          node --check reasoning.js
+          node --test tests.mjs
+
+      - name: Verify the landing remains deliberately minimal
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep --fixed-strings --quiet 'Mind map' index.html
+          grep --fixed-strings --quiet 'Choose your dimension' index.html
+          for mode in 1d 2d 3d 4d 5d 6d free; do
+            test "$(grep -o "data-mode=\"$mode\"" index.html | wc -l)" -eq 1
+          done
+          test "$(grep -o 'Start now\.' index.html | wc -l)" -eq 1
+          grep --fixed-strings --quiet 'start-button' index.html
+          grep --fixed-strings --quiet 'disabled' index.html
+          grep --fixed-strings --quiet 'optionCount: 6' reasoning.js
+          grep --fixed-strings --quiet 'Own connection' app.js
+
+      - name: Browser-render the real landing page
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/new-dimensions-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..25}; do
+            curl --silent --fail http://127.0.0.1:4173/ >/dev/null && break
+            sleep 1
+          done
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          test -n "$browser"
+          "$browser" --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu --window-size=1536,1024 --virtual-time-budget=3000 --dump-dom http://127.0.0.1:4173/ >/tmp/new-dimensions-dom.html
+          grep --fixed-strings --quiet 'Choose your dimension' /tmp/new-dimensions-dom.html
+          grep --fixed-strings --quiet 'Just map' /tmp/new-dimensions-dom.html
+          grep --fixed-strings --quiet 'Start now.' /tmp/new-dimensions-dom.html
+          "$browser" --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu --hide-scrollbars --window-size=1536,1024 --virtual-time-budget=3000 --screenshot=/tmp/new-dimensions-landing.png http://127.0.0.1:4173/
+          test -s /tmp/new-dimensions-landing.png
+
+      - name: Upload visual proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: new-dimensions-landing-proof
+          path: /tmp/new-dimensions-landing.png
+          retention-days: 3
+
+      - name: Commit only the finished application
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .payload .github/workflows/bootstrap-new-dimensions.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Implement minimal exploratory dimensional mind mapping'
+          git push origin HEAD:main
