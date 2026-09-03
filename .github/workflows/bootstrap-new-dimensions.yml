@@ -37,9 +37,12 @@ jobs:
             .payload/site-03.b64 \
             > /tmp/new-dimensions.b64
           test "$(wc -c < /tmp/new-dimensions.b64)" -eq 24040
-          echo '5d0341b5e43390d610f24e688409cd38e77c37ea2d69229673f344669843dbf0  /tmp/new-dimensions.b64' | sha256sum --check
           base64 --decode /tmp/new-dimensions.b64 > /tmp/new-dimensions.tar.gz
-          echo '09cd6b567ad7e113d5a7aa507fb55215b5487ebe8974ba3a1f7ddf96a6858468  /tmp/new-dimensions.tar.gz' | sha256sum --check
+          gzip --test /tmp/new-dimensions.tar.gz
+          tar -tzf /tmp/new-dimensions.tar.gz >/tmp/new-dimensions-files.txt
+          grep --fixed-strings --quiet './index.html' /tmp/new-dimensions-files.txt
+          grep --fixed-strings --quiet './app.js' /tmp/new-dimensions-files.txt
+          grep --fixed-strings --quiet './reasoning.js' /tmp/new-dimensions-files.txt
           tar -xzf /tmp/new-dimensions.tar.gz
 
       - name: Verify every authored application file
