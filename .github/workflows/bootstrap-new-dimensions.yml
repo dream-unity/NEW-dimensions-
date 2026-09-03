@@ -23,22 +23,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify and reconstruct the complete application
+      - name: Reconstruct the complete web application
         shell: bash
         run: |
           set -euo pipefail
-          echo '6e5f510a08fc11c7a65dc2571325d19ba6e79fad619cb279a9865739eee93636  .payload/site-00.b64' | sha256sum --check
-          echo 'fdb48ce4045c4ec0a7e443fb0b63c4a4fce854d7464db0e31c717829e77837fb  .payload/site-01.b64' | sha256sum --check
-          echo 'a25528794bd0b6ec8a6d0df6152c853668740bf4746472788fc3ea60d37a4d59  .payload/site-02.b64' | sha256sum --check
-          echo '4afc6b910f1d922ba60ef3c61d475fe4d60284666d8a1b03023caff420d50817  .payload/site-03.b64' | sha256sum --check
-          cat .payload/site-*.b64 > /tmp/new-dimensions.b64
+          cat \
+            .payload/site-00.b64 \
+            .payload/site-01a.b64 \
+            .payload/site-01b.b64 \
+            .payload/site-01c.b64 \
+            .payload/site-01d.b64 \
+            .payload/site-02.b64 \
+            .payload/site-03.b64 \
+            > /tmp/new-dimensions.b64
           test "$(wc -c < /tmp/new-dimensions.b64)" -eq 24524
           echo '5d0341b5e43390d610f24e688409cd38e77c37ea2d69229673f344669843dbf0  /tmp/new-dimensions.b64' | sha256sum --check
           base64 --decode /tmp/new-dimensions.b64 > /tmp/new-dimensions.tar.gz
           echo '09cd6b567ad7e113d5a7aa507fb55215b5487ebe8974ba3a1f7ddf96a6858468  /tmp/new-dimensions.tar.gz' | sha256sum --check
           tar -xzf /tmp/new-dimensions.tar.gz
 
-      - name: Verify every authored file byte-for-byte
+      - name: Verify every authored application file
         shell: bash
         run: |
           set -euo pipefail
@@ -73,7 +77,7 @@ jobs:
           grep --fixed-strings --quiet 'optionCount: 6' reasoning.js
           grep --fixed-strings --quiet 'Own connection' app.js
 
-      - name: Browser-render the real landing page
+      - name: Browser-render the actual software
         shell: bash
         run: |
           set -euo pipefail
@@ -100,7 +104,7 @@ jobs:
           path: /tmp/new-dimensions-landing.png
           retention-days: 3
 
-      - name: Commit only the finished application
+      - name: Commit only the finished software
         shell: bash
         run: |
           set -euo pipefail
